@@ -1,0 +1,22 @@
+namespace: moreati
+name: uv
+version: 0.0.1
+description: |-
+  Drop in replacement for Ansible's pip module, using Astral uv
+
+authors:
+  - Alex Willmer <alex@moreati.org.uk>
+
+license:
+  - GPL-3.0-or-later
+
+readme: README.md
+repository: http://github.com/moreati/ansible-uv
+issues: http://github.com/moreati/ansible-uv/issues
+
+tags:
+  - astral
+  - pip
+  - uv
+  - venv
+  - virtualenv

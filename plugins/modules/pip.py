@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # Copyright: (c) 2012, Matt Wright <matt@nobien.net>
+# Copyright: (c) 2024, Alex Willmer <alex@moreati.org.uk>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import annotations
@@ -9,16 +10,15 @@ from __future__ import annotations
 DOCUMENTATION = '''
 ---
 module: pip
-short_description: Manages Python library dependencies
+short_description: Manages Python library dependencies with Astral uv.
 description:
      - "Manage Python library dependencies. To use this module, one of the following keys is required: O(name)
        or O(requirements)."
-version_added: "0.7"
 options:
   name:
     description:
       - The name of a Python library to install or the url(bzr+,hg+,git+,svn+) of the remote package.
-      - This can be a list (since 2.2) and contain version specifiers (since 2.7).
+      - This can be a list and contain version specifiers.
     type: list
     elements: str
   version:
@@ -27,14 +27,14 @@ options:
     type: str
   requirements:
     description:
-      - The path to a pip requirements file, which should be local to the remote system.
+      - The path to a requirements file, which should be local to the remote system.
         File can be specified as a relative path if using the chdir option.
     type: str
   virtualenv:
     description:
       - An optional path to a I(virtualenv) directory to install into.
         It cannot be specified together with the 'executable' parameter
-        (added in 2.1).
+        .
         If the virtualenv does not exist, it will be created before installing
         packages. The optional virtualenv_site_packages, virtualenv_command,
         and virtualenv_python options affect the creation of the virtualenv.
@@ -48,59 +48,37 @@ options:
         created.
     type: bool
     default: "no"
-    version_added: "1.0"
   virtualenv_command:
-    description:
-      - The command or a pathname to the command to create the virtual
-        environment with. For example V(pyvenv), V(virtualenv),
-        V(virtualenv2), V(~/bin/virtualenv), V(/usr/local/bin/virtualenv).
-    type: path
-    default: virtualenv
-    version_added: "1.1"
+    type: str
+    default: uv pip
   virtualenv_python:
     description:
       - The Python executable used for creating the virtual environment.
         For example V(python3.12), V(python2.7). When not specified, the
-        Python version used to run the ansible module is used. This parameter
-        should not be used when O(virtualenv_command) is using V(pyvenv) or
-        the C(-m venv) module.
+        Python version used to run the ansible module is used.
     type: str
-    version_added: "2.0"
   state:
     description:
       - The state of module
-      - The 'forcereinstall' option is only available in Ansible 2.1 and above.
     type: str
     choices: [ absent, forcereinstall, latest, present ]
     default: present
   extra_args:
     description:
-      - Extra arguments passed to pip.
+      - Extra arguments passed to uv pip.
     type: str
-    version_added: "1.0"
   editable:
     description:
       - Pass the editable flag.
     type: bool
     default: 'no'
-    version_added: "2.0"
   chdir:
     description:
       - cd into this directory before running the command
     type: path
-    version_added: "1.3"
   executable:
-    description:
-      - The explicit executable or pathname for the pip executable,
-        if different from the Ansible Python interpreter. For
-        example V(pip3.3), if there are both Python 2.7 and 3.3 installations
-        in the system and you want to run pip for the Python 3.3 installation.
-      - Mutually exclusive with O(virtualenv) (added in 2.1).
-      - Does not affect the Ansible Python interpreter.
-      - The setuptools package must be installed for both the Ansible Python interpreter
-        and for the version of Python specified by this option.
-    type: path
-    version_added: "1.3"
+    type: str
+    default: uv pip
   umask:
     description:
       - The system umask to apply before installing the pip package. This is
@@ -109,14 +87,12 @@ options:
         packages which are to be used by all users. Note that this requires you
         to specify desired umask mode as an octal string, (e.g., "0022").
     type: str
-    version_added: "2.1"
   break_system_packages:
     description:
-      - Allow pip to modify an externally-managed Python installation as defined by PEP 668.
+      - Allow uv pip to modify an externally-managed Python installation as defined by PEP 668.
       - This is typically required when installing packages outside a virtual environment on modern systems.
     type: bool
     default: false
-    version_added: "2.17"
 extends_documentation_fragment:
   -  action_common_attributes
 attributes:
@@ -127,47 +103,37 @@ attributes:
     platform:
         platforms: posix
 notes:
-   - Python installations marked externally-managed (as defined by PEP668) cannot be updated by pip versions >= 23.0.1 without the use of
+   - Python installations marked externally-managed (as defined by PEP668) cannot be updated by uv pip without the use of
      a virtual environment or setting the O(break_system_packages) option.
-   - The virtualenv (U(http://www.virtualenv.org/)) must be
-     installed on the remote host if the virtualenv parameter is specified and
-     the virtualenv needs to be created.
-   - Although it executes using the Ansible Python interpreter, the pip module shells out to
-     run the actual pip command, so it can use any pip version you specify with O(executable).
-     By default, it uses the pip version for the Ansible Python interpreter. For example, pip3 on python 3, and pip2 or pip on python 2.
-   - The interpreter used by Ansible
-     (see R(ansible_python_interpreter, ansible_python_interpreter))
-     requires the setuptools package, regardless of the version of pip set with
-     the O(executable) option.
+   - Astral uv must be installed on the remote host.
 requirements:
-- pip
-- virtualenv
-- setuptools or packaging
+- uv
 author:
 - Matt Wright (@mattupstate)
+- Alex Willmer (@moreati)
 '''
 
 EXAMPLES = '''
 - name: Install bottle python package
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name: bottle
 
 - name: Install bottle python package on version 0.11
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name: bottle==0.11
 
 - name: Install bottle python package with version specifiers
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name: bottle>0.10,<0.20,!=0.11
 
 - name: Install multi python packages with version specifiers
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name:
       - django>1.11.0,<1.12.0
       - bottle>0.10,<0.20,!=0.11
 
 - name: Install python package using a proxy
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name: six
   environment:
     http_proxy: 'http://127.0.0.1:8080'
@@ -175,70 +141,70 @@ EXAMPLES = '''
 
 # You do not have to supply '-e' option in extra_args
 - name: Install MyApp using one of the remote protocols (bzr+,hg+,git+,svn+)
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name: svn+http://myrepo/svn/MyApp#egg=MyApp
 
 - name: Install MyApp using one of the remote protocols (bzr+,hg+,git+)
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name: git+http://myrepo/app/MyApp
 
 - name: Install MyApp from local tarball
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name: file:///path/to/MyApp.tar.gz
 
 - name: Install bottle into the specified (virtualenv), inheriting none of the globally installed modules
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name: bottle
     virtualenv: /my_app/venv
 
 - name: Install bottle into the specified (virtualenv), inheriting globally installed modules
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name: bottle
     virtualenv: /my_app/venv
     virtualenv_site_packages: yes
 
-- name: Install bottle into the specified (virtualenv), using Python 2.7
-  ansible.builtin.pip:
+- name: Install bottle into the specified (virtualenv), using Python 3.12
+  moreati.uv.pip:
     name: bottle
     virtualenv: /my_app/venv
-    virtualenv_command: virtualenv-2.7
+    virtualenv_python: python3.12
 
 - name: Install bottle within a user home directory
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name: bottle
     extra_args: --user
 
 - name: Install specified python requirements
-  ansible.builtin.pip:
+  moreati.uv.pip:
     requirements: /my_app/requirements.txt
 
 - name: Install specified python requirements in indicated (virtualenv)
-  ansible.builtin.pip:
+  moreati.uv.pip:
     requirements: /my_app/requirements.txt
     virtualenv: /my_app/venv
 
 - name: Install specified python requirements and custom Index URL
-  ansible.builtin.pip:
+  moreati.uv.pip:
     requirements: /my_app/requirements.txt
     extra_args: -i https://example.com/pypi/simple
 
 - name: Install specified python requirements offline from a local directory with downloaded packages
-  ansible.builtin.pip:
+  moreati.uv.pip:
     requirements: /my_app/requirements.txt
     extra_args: "--no-index --find-links=file:///my_downloaded_packages_dir"
 
 - name: Install bottle for Python 3.3 specifically, using the 'pip3.3' executable
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name: bottle
     executable: pip3.3
 
 - name: Install bottle, forcing reinstallation if it's already installed
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name: bottle
     state: forcereinstall
 
 - name: Install bottle while ensuring the umask is 0022 (to ensure other users can use it)
-  ansible.builtin.pip:
+  moreati.uv.pip:
     name: bottle
     umask: "0022"
   become: True
@@ -351,18 +317,6 @@ def _is_vcs_url(name):
     return re.match(_VCS_RE, name)
 
 
-def _is_venv_command(command):
-    venv_parser = argparse.ArgumentParser()
-    venv_parser.add_argument('-m', type=str)
-    argv = shlex.split(command)
-    if argv[0] == 'pyvenv':
-        return True
-    args, dummy = venv_parser.parse_known_args(argv[1:])
-    if args.m == 'venv':
-        return True
-    return False
-
-
 def _is_package_name(name):
     """Test whether the name is a package name or a version specifier."""
     return not name.lstrip().startswith(tuple(op_dict.keys()))
@@ -450,52 +404,31 @@ def _is_present(module, req, installed_pkgs, pkg_command):
 
 
 def _get_pip(module, env=None, executable=None):
-    candidate_pip_basenames = ('pip3',)
+    candidate_argvs = (
+        ['uv', 'pip'],
+    )
     pip = None
     if executable is not None:
-        if os.path.isabs(executable):
-            pip = executable
+        argv = shlex.split(executable)
+        if os.path.isabs(argv[0]):
+            pip = argv
         else:
             # If you define your own executable that executable should be the only candidate.
             # As noted in the docs, executable doesn't work with virtualenvs.
-            candidate_pip_basenames = (executable,)
-    elif executable is None and env is None and _have_pip_module():
-        # If no executable or virtualenv were specified, use the pip module for the current Python interpreter if available.
-        # Use of `__main__` is required to support Python 2.6 since support for executing packages with `runpy` was added in Python 2.7.
-        # Without it Python 2.6 gives the following error: pip is a package and cannot be directly executed
-        pip = [sys.executable, '-m', 'pip.__main__']
+            candidate_argvs = (argv,)
 
     if pip is None:
-        if env is None:
             opt_dirs = []
-            for basename in candidate_pip_basenames:
-                pip = module.get_bin_path(basename, False, opt_dirs)
-                if pip is not None:
+            for basename, *rest in candidate_argvs:
+                uv = module.get_bin_path(basename, False, opt_dirs)
+                if uv is not None:
+                    pip = [uv, *rest]
                     break
             else:
                 # For-else: Means that we did not break out of the loop
                 # (therefore, that pip was not found)
-                module.fail_json(msg='Unable to find any of %s to use.  pip'
-                                     ' needs to be installed.' % ', '.join(candidate_pip_basenames))
-        else:
-            # If we're using a virtualenv we must use the pip from the
-            # virtualenv
-            venv_dir = os.path.join(env, 'bin')
-            candidate_pip_basenames = (candidate_pip_basenames[0], 'pip')
-            for basename in candidate_pip_basenames:
-                candidate = os.path.join(venv_dir, basename)
-                if os.path.exists(candidate) and is_executable(candidate):
-                    pip = candidate
-                    break
-            else:
-                # For-else: Means that we did not break out of the loop
-                # (therefore, that pip was not found)
-                module.fail_json(msg='Unable to find pip in the virtualenv, %s, ' % env +
-                                     'under any of these names: %s. ' % (', '.join(candidate_pip_basenames)) +
-                                     'Make sure pip is present in the virtualenv.')
-
-    if not isinstance(pip, list):
-        pip = [pip]
+                basenames = ', '.join(argv[0] for argv in candidate_argvs)
+                module.fail_json(msg=f'Unable to find any of {basenames} to use. uv needs to be installed.')
 
     return pip
 
@@ -585,25 +518,15 @@ def setup_virtualenv(module, env, chdir, out, err):
         if '--no-site-packages' in cmd_opts:
             cmd.append('--no-site-packages')
 
-    virtualenv_python = module.params['virtualenv_python']
-    # -p is a virtualenv option, not compatible with pyenv or venv
-    # this conditional validates if the command being used is not any of them
-    if not _is_venv_command(module.params['virtualenv_command']):
-        if virtualenv_python:
-            cmd.append('-p%s' % virtualenv_python)
-        else:
-            # This code mimics the upstream behaviour of using the python
-            # which invoked virtualenv to determine which python is used
-            # inside of the virtualenv (when none are specified).
-            cmd.append('-p%s' % sys.executable)
+    # Only use already installed Python interpreters.
+    # Don't download them, for now.
+    cmd.extend(['--python-preference', 'only-system'])
 
-    # if venv or pyvenv are used and virtualenv_python is defined, then
-    # virtualenv_python is ignored, this has to be acknowledged
-    elif module.params['virtualenv_python']:
-        module.fail_json(
-            msg='virtualenv_python should not be used when'
-                ' using the venv module or pyvenv as virtualenv_command'
-        )
+    virtualenv_python = module.params['virtualenv_python']
+    if virtualenv_python:
+        cmd.extend(['--python', virtualenv_python])
+    else:
+        cmd.extend(['--python', sys.executable])
 
     cmd.append(env)
     rc, out_venv, err_venv = module.run_command(cmd, cwd=chdir)
@@ -693,12 +616,12 @@ def main():
             requirements=dict(type='str'),
             virtualenv=dict(type='path'),
             virtualenv_site_packages=dict(type='bool', default=False),
-            virtualenv_command=dict(type='path', default='virtualenv'),
+            virtualenv_command=dict(type='str', default='uv venv'),
             virtualenv_python=dict(type='str'),
             extra_args=dict(type='str'),
             editable=dict(type='bool', default=False),
             chdir=dict(type='path'),
-            executable=dict(type='path'),
+            executable=dict(type='str', default='uv pip'),
             umask=dict(type='str'),
             break_system_packages=dict(type='bool', default=False),
         ),
@@ -756,6 +679,7 @@ def main():
         pip = _get_pip(module, env, module.params['executable'])
 
         cmd = pip + state_map[state]
+        cmd.extend(['--python', py_bin])
 
         # If there's a virtualenv we want things we install to be able to use other
         # installations that exist as binaries within this virtualenv. Example: we
