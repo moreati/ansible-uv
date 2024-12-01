@@ -292,20 +292,6 @@ from ansible.module_utils.basic import AnsibleModule, is_executable, missing_req
 from ansible.module_utils.common.locale import get_best_parsable_locale
 
 
-#: Python one-liners to be run at the command line that will determine the
-# installed version for these special libraries.  These are libraries that
-# don't end up in the output of pip freeze.
-_SPECIAL_PACKAGE_CHECKERS = {
-    'importlib': {
-        'setuptools': 'from importlib.metadata import version; print(version("setuptools"))',
-        'pip': 'from importlib.metadata import version; print(version("pip"))',
-    },
-    'pkg_resources': {
-        'setuptools': 'import setuptools; print(setuptools.__version__)',
-        'pip': 'import pkg_resources; print(pkg_resources.get_distribution("pip").version)',
-    }
-}
-
 _VCS_RE = re.compile(r'(svn|git|hg|bzr)\+')
 
 op_dict = {">=": operator.ge, "<=": operator.le, ">": operator.gt,
@@ -378,11 +364,7 @@ def _get_packages(module, pip, chdir):
     lang_env = {'LANG': locale, 'LC_ALL': locale, 'LC_MESSAGES': locale}
     rc, out, err = module.run_command(command, cwd=chdir, environ_update=lang_env)
 
-    # If there was an error (pip version too old) then use 'pip freeze'.
     if rc != 0:
-        command = pip + ['freeze']
-        rc, out, err = module.run_command(command, cwd=chdir)
-        if rc != 0:
             _fail(module, command, out, err)
 
     return ' '.join(command), out, err
@@ -470,30 +452,6 @@ def _fail(module, cmd, out, err):
     if err:
         msg += "\n:stderr: %s" % (err, )
     module.fail_json(cmd=cmd, msg=msg)
-
-
-def _get_package_info(module, package, python_bin=None):
-    """This is only needed for special packages which do not show up in pip freeze
-
-    pip and setuptools fall into this category.
-
-    :returns: a string containing the version number if the package is
-        installed.  None if the package is not installed.
-    """
-    if python_bin is None:
-        return
-
-    discovery_mechanism = 'pkg_resources'
-    importlib_rc = module.run_command([python_bin, '-c', 'import importlib.metadata'])[0]
-    if importlib_rc == 0:
-        discovery_mechanism = 'importlib'
-
-    rc, out, err = module.run_command([python_bin, '-c', _SPECIAL_PACKAGE_CHECKERS[discovery_mechanism][package]])
-    if rc:
-        formatted_dep = None
-    else:
-        formatted_dep = '%s==%s' % (package, out.strip())
-    return formatted_dep
 
 
 def setup_virtualenv(module, env, chdir, out, err):
@@ -756,17 +714,6 @@ def main():
             changed = False
             if name:
                 pkg_list = [p for p in out.split('\n') if not p.startswith('You are using') and not p.startswith('You should consider') and p]
-
-                if pkg_cmd.endswith(' freeze') and ('pip' in name or 'setuptools' in name):
-                    # Older versions of pip (pre-1.3) do not have pip list.
-                    # pip freeze does not list setuptools or pip in its output
-                    # So we need to get those via a specialcase
-                    for pkg in ('setuptools', 'pip'):
-                        if pkg in name:
-                            formatted_dep = _get_package_info(module, pkg, py_bin)
-                            if formatted_dep is not None:
-                                pkg_list.append(formatted_dep)
-                                out += '%s\n' % formatted_dep
 
                 for package in packages:
                     is_present = _is_present(module, package, pkg_list, pkg_cmd)
