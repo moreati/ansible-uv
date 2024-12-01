@@ -14,6 +14,16 @@ readme: README.md
 repository: http://github.com/moreati/ansible-uv
 issues: http://github.com/moreati/ansible-uv/issues
 
+build_ignore:
+  - .DS_Store
+  - .git
+  - .gitignore
+  - galaxy.yml
+
+  - "*.py[cdo]"
+  - "*.retry"
+  - "*.tar.gz"
+
 tags:
   - astral
   - pip
