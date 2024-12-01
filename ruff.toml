@@ -1,0 +1,6 @@
+target-version = "py38"
+
+[lint]
+ignore = [
+    "E402",  # Module level import not at top of file
+]

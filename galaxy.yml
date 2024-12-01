@@ -16,6 +16,7 @@ issues: http://github.com/moreati/ansible-uv/issues
 
 build_ignore:
   - .DS_Store
+  - .ansible-lint
   - .git
   - .gitignore
   - .tox
@@ -23,6 +24,7 @@ build_ignore:
   - ansible.cfg
   - bootstrap*.yml
   - galaxy.yml
+  - ruff.toml
   - tox.ini
   - uv_install.sh
 

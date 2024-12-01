@@ -1,0 +1,9 @@
+# https://ansible-lint.readthedocs.io/configuring/
+# https://github.com/ansible/ansible-lint/issues/132
+---
+offline: true
+
+skip_list:
+  - fqcn                    # Ignore uses unqualified names (e.g. command)
+  - key-order[task]         # Ignore when: at end of block
+  - yaml[document-start]    # Ignore missing --- at start of file
