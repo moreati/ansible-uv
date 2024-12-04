@@ -531,7 +531,7 @@ class Package:
 def main():
     state_map = dict(
         present=['install'],
-        absent=['uninstall', '-y'],
+        absent=['uninstall'],
         latest=['install', '-U'],
         forcereinstall=['install', '-U', '--force-reinstall'],
     )
