@@ -106,6 +106,7 @@ notes:
    - Python installations marked externally-managed (as defined by PEP668) cannot be updated by uv pip without the use of
      a virtual environment or setting the O(break_system_packages) option.
    - Astral uv must be installed on the remote host.
+   - Astral uv >= 0.5.6 is required for O(state) = V(absent) in check mode.
 requirements:
 - uv
 author:
@@ -265,30 +266,9 @@ import sys
 import tempfile
 import operator
 import shlex
-import traceback
-
-from ansible.module_utils.compat.version import LooseVersion
-
-PACKAGING_IMP_ERR = None
-HAS_PACKAGING = False
-HAS_SETUPTOOLS = False
-try:
-    from packaging.requirements import Requirement as parse_requirement
-    HAS_PACKAGING = True
-except Exception:
-    # This is catching a generic Exception, due to packaging on EL7 raising a TypeError on import
-    HAS_PACKAGING = False
-    PACKAGING_IMP_ERR = traceback.format_exc()
-    try:
-        from pkg_resources import Requirement
-        parse_requirement = Requirement.parse  # type: ignore[misc,assignment]
-        del Requirement
-        HAS_SETUPTOOLS = True
-    except ImportError:
-        pass
 
 from ansible.module_utils.common.text.converters import to_native
-from ansible.module_utils.basic import AnsibleModule, is_executable, missing_required_lib
+from ansible.module_utils.basic import AnsibleModule, is_executable
 from ansible.module_utils.common.locale import get_best_parsable_locale
 
 
@@ -368,21 +348,6 @@ def _get_packages(module, pip, chdir):
             _fail(module, command, out, err)
 
     return ' '.join(command), out, err
-
-
-def _is_present(module, req, installed_pkgs, pkg_command):
-    '''Return whether or not package is installed.'''
-    for pkg in installed_pkgs:
-        if '==' in pkg:
-            pkg_name, pkg_version = pkg.split('==')
-            pkg_name = Package.canonicalize_name(pkg_name)
-        else:
-            continue
-
-        if pkg_name == req.package_name and req.is_satisfied_by(pkg_version):
-            return True
-
-    return False
 
 
 def _get_pip(module, env=None, executable=None):
@@ -473,49 +438,23 @@ class Package:
     test whether a package is already satisfied.
     """
 
+    # https://packaging.python.org/en/latest/specifications/name-normalization/#name-normalization
     _CANONICALIZE_RE = re.compile(r'[-_.]+')
 
-    def __init__(self, name_string, version_string=None):
-        self._plain_package = False
-        self.package_name = name_string
-        self._requirement = None
+    # https://packaging.python.org/en/latest/specifications/name-normalization/#name-format
+    _NAME_RE = re.compile(r'[A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9]', re.IGNORECASE)
 
-        if version_string:
-            version_string = version_string.lstrip()
-            separator = '==' if version_string[0].isdigit() else ' '
-            name_string = separator.join((name_string, version_string))
-        try:
-            self._requirement = parse_requirement(name_string)
-            # old pkg_resource will replace 'setuptools' with 'distribute' when it's already installed
-            project_name = Package.canonicalize_name(
-                getattr(self._requirement, 'name', None) or getattr(self._requirement, 'project_name', None)
-            )
-            if project_name == "distribute" and "setuptools" in name_string:
-                self.package_name = "setuptools"
-            else:
-                self.package_name = project_name
-            self._plain_package = True
-        except ValueError as e:
-            pass
+    _VERSION_OPS_RE = re.compile('|'.join(re.escape(s) for s in op_dict))
+
+    def __init__(self, requirement):
+            self._unparsed = requirement
+            self.name = self._NAME_RE.match(requirement)
 
     @property
     def has_version_specifier(self):
-        if self._plain_package:
-            return bool(getattr(self._requirement, 'specifier', None) or getattr(self._requirement, 'specs', None))
+        if self._VERSION_OPS_RE.search(self._unparsed):
+            return True
         return False
-
-    def is_satisfied_by(self, version_to_test):
-        if not self._plain_package:
-            return False
-        try:
-            return self._requirement.specifier.contains(version_to_test, prereleases=True)
-        except AttributeError:
-            # old setuptools has no specifier, do fallback
-            version_to_test = LooseVersion(version_to_test)
-            return all(
-                op_dict[op](version_to_test, LooseVersion(ver))
-                for op, ver in self._requirement.specs
-            )
 
     @staticmethod
     def canonicalize_name(name):
@@ -523,9 +462,10 @@ class Package:
         return Package._CANONICALIZE_RE.sub("-", name).lower()
 
     def __str__(self):
-        if self._plain_package:
-            return to_native(self._requirement)
-        return self.package_name
+        return self._unparsed
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self._unparsed})'
 
 
 def main():
@@ -557,10 +497,6 @@ def main():
         mutually_exclusive=[['name', 'requirements'], ['executable', 'virtualenv']],
         supports_check_mode=True,
     )
-
-    if not HAS_SETUPTOOLS and not HAS_PACKAGING:
-        module.fail_json(msg=missing_required_lib("packaging"),
-                         exception=PACKAGING_IMP_ERR)
 
     state = module.params['state']
     name = module.params['name']
@@ -643,7 +579,7 @@ def main():
                             "Please keep the version specifier, but remove the 'version' argument."
                     )
                 # if the version specifier is provided by version, append that into the package
-                packages[0] = Package(to_native(packages[0]), version)
+                packages[0] = Package(f'{packages[0]}=={version}')
 
         if module.params['editable']:
             args_list = []  # used if extra_args is not used at all
@@ -676,21 +612,17 @@ def main():
             if extra_args or requirements or state == 'latest' or not name:
                 module.exit_json(changed=True)
 
-            pkg_cmd, out_pip, err_pip = _get_packages(module, pip, chdir)
-
-            out += out_pip
-            err += err_pip
-
-            changed = False
-            if name:
-                pkg_list = [p for p in out.split('\n') if not p.startswith('You are using') and not p.startswith('You should consider') and p]
-
-                for package in packages:
-                    is_present = _is_present(module, package, pkg_list, pkg_cmd)
-                    if (state == 'present' and not is_present) or (state == 'absent' and is_present):
-                        changed = True
-                        break
-            module.exit_json(changed=changed, cmd=pkg_cmd, stdout=out, stderr=err)
+            # `uv pip install --dry-run` requires uv >= 0.1.18 (2024-03-13)
+            # `uv pip uninstall --dry-run` requires uv >= 0.5.6 (2024-12-03)
+            cmd += ['--dry-run']
+            rc, dryrun_out, dryrun_err = module.run_command(cmd, path_prefix=path_prefix, cwd=chdir)
+            out += dryrun_out
+            err += dryrun_err
+            if rc != 0:
+                _fail(module, cmd, out, err)
+            dryrun_match = re.search(r'^(?:Would uninstall|Would install)', dryrun_err, re.MULTILINE)
+            changed = bool(dryrun_match)
+            module.exit_json(changed=changed, cmd=cmd, stdout=out, stderr=err)
 
         out_freeze_before = None
         if requirements or has_vcs:
