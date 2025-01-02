@@ -50,7 +50,7 @@ options:
     default: "no"
   virtualenv_command:
     type: str
-    default: uv pip
+    default: uv venv
   virtualenv_python:
     description:
       - The Python executable used for creating the virtual environment.
@@ -295,6 +295,19 @@ def _is_venv_command(command):
     return False
 
 
+def _is_probably_uv_venv_command(command):
+    """Return True if command looks like an invocation of `uv venv`, False otherwise.
+
+    >>> _is_probably_uv_venv_command(['uv', 'venv'])
+    True
+    >>> _is_probably_uv_venv_command(['/foo/bin/uv', '-x', 'venv', '--opt', 'baz'])
+    True
+    """
+    if os.path.basename(command[0]) == 'uv' and 'venv' in command:
+        return True
+    return False
+
+
 def _is_package_name(name):
     """Test whether the name is a package name or a version specifier."""
     return not name.lstrip().startswith(tuple(op_dict.keys()))
@@ -425,7 +438,8 @@ def setup_virtualenv(module, env, chdir, out, err):
 
     # Only use already installed Python interpreters.
     # Don't download them, for now.
-    cmd.extend(['--python-preference', 'only-system'])
+    if _is_probably_uv_venv_command(cmd):
+      cmd.extend(['--python-preference', 'only-system'])
 
     virtualenv_python = module.params['virtualenv_python']
     # -p is a virtualenv option, not compatible with pyenv or venv

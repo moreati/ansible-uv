@@ -1,0 +1,19 @@
+- name: Issue 10 test
+  hosts: localhost
+  gather_facts: false
+  vars:
+    temp_dir: "{{ lookup('env', 'TMPDIR') | default('/tmp') | normpath }}"
+    work_dir: "{{ temp_dir }}/moreati.uv.pip"
+    test_projects:
+      - sampleproject
+  tasks:
+    - name: Create work dir
+      file:
+        path: "{{ work_dir }}"
+        state: directory
+        mode: u=rwx,go=rx
+
+    - moreati.uv.pip:
+        name: "{{ test_projects }}"
+        virtualenv: "{{ work_dir }}/issue10"
+        #virtualenv_command: "{{ ansible_playbook_python }} -mvenv"
