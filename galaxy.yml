@@ -24,6 +24,7 @@ build_ignore:
   - ansible.cfg
   - bootstrap*.yml
   - galaxy.yml
+  - issue*.yml
   - ruff.toml
   - tox.ini
   - uv_install.sh

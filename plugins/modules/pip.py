@@ -50,7 +50,7 @@ options:
     default: "no"
   virtualenv_command:
     type: str
-    default: uv pip
+    default: uv venv
   virtualenv_python:
     description:
       - The Python executable used for creating the virtual environment.
@@ -283,6 +283,31 @@ def _is_vcs_url(name):
     return re.match(_VCS_RE, name)
 
 
+def _is_venv_command(command):
+    venv_parser = argparse.ArgumentParser()
+    venv_parser.add_argument('-m', type=str)
+    argv = shlex.split(command)
+    if argv[0] == 'pyvenv':
+        return True
+    args, dummy = venv_parser.parse_known_args(argv[1:])
+    if args.m == 'venv':
+        return True
+    return False
+
+
+def _is_probably_uv_venv_command(command):
+    """Return True if command looks like an invocation of `uv venv`, False otherwise.
+
+    >>> _is_probably_uv_venv_command(['uv', 'venv'])
+    True
+    >>> _is_probably_uv_venv_command(['/foo/bin/uv', '-x', 'venv', '--opt', 'baz'])
+    True
+    """
+    if os.path.basename(command[0]) == 'uv' and 'venv' in command:
+        return True
+    return False
+
+
 def _is_package_name(name):
     """Test whether the name is a package name or a version specifier."""
     return not name.lstrip().startswith(tuple(op_dict.keys()))
@@ -413,13 +438,28 @@ def setup_virtualenv(module, env, chdir, out, err):
 
     # Only use already installed Python interpreters.
     # Don't download them, for now.
-    cmd.extend(['--python-preference', 'only-system'])
+    if _is_probably_uv_venv_command(cmd):
+      cmd.extend(['--python-preference', 'only-system'])
 
     virtualenv_python = module.params['virtualenv_python']
-    if virtualenv_python:
-        cmd.extend(['--python', virtualenv_python])
-    else:
-        cmd.extend(['--python', sys.executable])
+    # -p is a virtualenv option, not compatible with pyenv or venv
+    # this conditional validates if the command being used is not any of them
+    if not _is_venv_command(module.params['virtualenv_command']):
+        if virtualenv_python:
+            cmd.append('-p%s' % virtualenv_python)
+        else:
+            # This code mimics the upstream behaviour of using the python
+            # which invoked virtualenv to determine which python is used
+            # inside of the virtualenv (when none are specified).
+            cmd.append('-p%s' % sys.executable)
+
+    # if venv or pyvenv are used and virtualenv_python is defined, then
+    # virtualenv_python is ignored, this has to be acknowledged
+    elif module.params['virtualenv_python']:
+        module.fail_json(
+            msg='virtualenv_python should not be used when'
+                ' using the venv module or pyvenv as virtualenv_command'
+        )
 
     cmd.append(env)
     rc, out_venv, err_venv = module.run_command(cmd, cwd=chdir)
