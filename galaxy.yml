@@ -21,6 +21,7 @@ build_ignore:
   - .gitignore
   - .tox
   - .venv
+  - Makefile
   - ansible.cfg
   - bootstrap*.yml
   - galaxy.yml
