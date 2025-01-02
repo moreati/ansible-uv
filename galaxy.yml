@@ -1,6 +1,6 @@
 namespace: moreati
 name: uv
-version: 0.0.2
+version: 0.0.3
 description: |-
   Drop in replacement for Ansible's pip module, using Astral uv
 
